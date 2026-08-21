@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-title" content="旅行打卡本"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<link rel="apple-touch-icon" href="icon180.png"/>
+<title>旅行打卡本</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont}
+body{padding:14px;background:#f5f7fa;max-width:900px;margin:0 auto}
+h2{margin-bottom:12px;color:#222}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+button{padding:8px 12px;border:none;border-radius:8px;background:#2563eb;color:#fff;font-size:14px}
+button.secondary{background:#6b7280}
+button.success{background:#16a34a}
+table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden}
+th,td{border:1px solid #ddd;padding:10px;font-size:14px}
+th{background:#eef2ff}
+.row-done{background:#dcfce7}
+.input-wrap{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+input{padding:8px;border:1px solid #ccc;border-radius:6px;font-size:14px}
+input[type="text"]{flex:1;min-width:90px}
+#fileInput{display:none}
+</style>
+</head>
+<body>
+<h2>旅行打卡记录</h2>
+<div class="btns">
+  <button onclick="addRow()">新增记录</button>
+  <button class="secondary" onclick="exportJson()">导出JSON</button>
+  <button class="secondary" onclick="document.getElementById('fileInput').click()">导入JSON</button>
+  <button class="secondary" onclick="exportCsv()">导出CSV</button>
+  <button class="success" onclick="uploadToCloud()">上传云端</button>
+  <button class="success" onclick="pullFromCloud()">拉取云端</button>
+</div>
+<div class="input-wrap">
+  <input id="place" placeholder="地点">
+  <input id="food" placeholder="美食">
+  <input id="note" placeholder="备注">
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>打卡</th>
+      <th>地点</th>
+      <th>美食</th>
+      <th>备注</th>
+      <th>操作</th>
+    </tr>
+  </thead>
+  <tbody id="tableBody"></tbody>
+</table>
+<input type="file" id="fileInput" accept=".json" onchange="importJson(event)">
+
+<script>
+const STORAGE_KEY = "travelList";
+// ========= 这里改成你部署好的 workers 地址 =========
+const WORKER_URL = "https://xxx.xxx.workers.dev";
+const REMOTE_FILE_KEY = "travel-data.json";
+
+// 读取本地
+function getList(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+function saveLocal(arr){
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
+}
+
+//渲染表格
+function render(){
+  const arr = getList();
+  const tb = document.getElementById("tableBody");
+  tb.innerHTML = "";
+  arr.forEach((item,idx)=>{
+    const tr = document.createElement("tr");
+    if(item.done) tr.classList.add("row-done");
+    tr.innerHTML = `
+      <td><input type="checkbox" ${item.done?"checked":""} onchange="toggleDone(${idx})"></td>
+      <td>${escapeHtml(item.place)}</td>
+      <td>${escapeHtml(item.food)}</td>
+      <td>${escapeHtml(item.note)}</td>
+      <td><button onclick="del(${idx})" style="background:#dc2626">删除</button></td>
+    `;
+    tb.appendChild(tr);
+  })
+}
+
+function escapeHtml(s){
+  if(!s) return "";
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function addRow(){
+  const place = document.getElementById("place").value.trim();
+  const food = document.getElementById("food").value.trim();
+  const note = document.getElementById("note").value.trim();
+  if(!place){alert("请填写地点");return}
+  const arr = getList();
+  arr.push({place,food,note,done:false});
+  saveLocal(arr);
+  render();
+  document.getElementById("place").value="";
+  document.getElementById("food").value="";
+  document.getElementById("note").value="";
+}
+
+function toggleDone(i){
+  const arr = getList();
+  arr[i].done = !arr[i].done;
+  saveLocal(arr);
+  render();
+}
+
+function del(i){
+  const arr = getList();
+  arr.splice(i,1);
+  saveLocal(arr);
+  render();
+}
+
+//导出JSON
+function exportJson(){
+  const data = getList();
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  downloadFile(blob,"travel.json");
+}
+
+//导入JSON
+function importJson(evt){
+  const f = evt.target.files[0];
+  if(!f) return;
+  const r = new FileReader();
+  r.onload=e=>{
+    try{
+      const arr = JSON.parse(e.target.result);
+      saveLocal(arr);
+      render();
+      alert("导入成功");
+    }catch(err){alert("文件格式错误")}
+  }
+  r.readAsText(f);
+}
+
+//导出CSV
+function exportCsv(){
+  const arr = getList();
+  let csv = "打卡,地点,美食,备注\n";
+  arr.forEach(it=>{
+    csv += `${it.done?"已完成":"未完成"},"${it.place}","${it.food}","${it.note}"\n`
+  })
+  const blob = new Blob([csv],{type:"text/csv;charset=utf-8"});
+  downloadFile(blob,"travel.csv");
+}
+
+function downloadFile(blob,filename){
+  const a = document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download=filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ========== Cloudflare Workers 云端同步 ==========
+async function uploadToCloud(){
+  const list = getList();
+  try{
+    const resp = await fetch(`${WORKER_URL}/save`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        key: REMOTE_FILE_KEY,
+        data: list
+      })
+    })
+    if(!resp.ok) throw new Error("接口异常");
+    alert("✅上传云端成功");
+  }catch(e){
+    alert("❌上传失败："+e.message)
+  }
+
+async function pullFromCloud(){
+  try{
+    const resp = await fetch(`${WORKER_URL}/get?key=${REMOTE_FILE_KEY}`);
+    if(!resp.ok) throw new Error("接口异常");
+    const json = await resp.json();
+    saveLocal(json.data);
+    render();
+    alert("✅已拉取云端数据");
+  }catch(e){
+    alert("❌拉取失败："+e.message)
+  }
+}
+
+window.onload=render;
+</script>
+</body>
+</html>
