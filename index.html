@@ -4,10 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-title" content="旅行打卡本666"/>
+<meta name="apple-mobile-web-app-title" content="旅行打卡本"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <link rel="apple-touch-icon" href="icon180.png"/>
-<title>旅行打卡本111</title>
+<title>旅行打卡本</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont}
 body{padding:14px;background:#f5f7fa;max-width:900px;margin:0 auto}
@@ -27,7 +27,7 @@ input[type="text"]{flex:1;min-width:90px}
 </style>
 </head>
 <body>
-<h2>旅行打卡记录h2</h2>
+<h2>旅行打卡记录</h2>
 <div class="btns">
   <button onclick="addRow()">新增记录</button>
   <button class="secondary" onclick="exportJson()">导出JSON</button>
@@ -57,11 +57,11 @@ input[type="text"]{flex:1;min-width:90px}
 
 <script>
 const STORAGE_KEY = "travelList";
-// ========= 这里改成你部署好的 workers 地址 =========
+// ===================== 修改这里为你的 Workers 地址 =====================
 const WORKER_URL = "https://xxx.xxx.workers.dev";
 const REMOTE_FILE_KEY = "travel-data.json";
 
-// 读取本地
+// 读取本地存储
 function getList(){
   const raw = localStorage.getItem(STORAGE_KEY);
   return raw ? JSON.parse(raw) : [];
@@ -70,7 +70,7 @@ function saveLocal(arr){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
 }
 
-//渲染表格
+// 渲染表格
 function render(){
   const arr = getList();
   const tb = document.getElementById("tableBody");
@@ -83,17 +83,19 @@ function render(){
       <td>${escapeHtml(item.place)}</td>
       <td>${escapeHtml(item.food)}</td>
       <td>${escapeHtml(item.note)}</td>
-      <td><button onclick="del(${idx})" style="background:#dc2626">删除</button></td>
+      <td><button onclick="del(${idx})" style="background:#dc2626;color:white;border:none;padding:4px 8px;border-radius:6px">删除</button></td>
     `;
     tb.appendChild(tr);
   })
 }
 
+// HTML转义防止XSS
 function escapeHtml(s){
   if(!s) return "";
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
 }
 
+// 添加一行记录
 function addRow(){
   const place = document.getElementById("place").value.trim();
   const food = document.getElementById("food").value.trim();
@@ -108,6 +110,7 @@ function addRow(){
   document.getElementById("note").value="";
 }
 
+// 切换打卡状态
 function toggleDone(i){
   const arr = getList();
   arr[i].done = !arr[i].done;
@@ -115,6 +118,7 @@ function toggleDone(i){
   render();
 }
 
+// 删除记录
 function del(i){
   const arr = getList();
   arr.splice(i,1);
@@ -122,14 +126,14 @@ function del(i){
   render();
 }
 
-//导出JSON
+// 导出JSON文件
 function exportJson(){
   const data = getList();
   const blob = new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   downloadFile(blob,"travel.json");
 }
 
-//导入JSON
+// 导入JSON文件
 function importJson(evt){
   const f = evt.target.files[0];
   if(!f) return;
@@ -145,7 +149,7 @@ function importJson(evt){
   r.readAsText(f);
 }
 
-//导出CSV
+// 导出CSV
 function exportCsv(){
   const arr = getList();
   let csv = "打卡,地点,美食,备注\n";
@@ -156,6 +160,7 @@ function exportCsv(){
   downloadFile(blob,"travel.csv");
 }
 
+// 文件下载工具
 function downloadFile(blob,filename){
   const a = document.createElement("a");
   a.href=URL.createObjectURL(blob);
@@ -164,7 +169,7 @@ function downloadFile(blob,filename){
   URL.revokeObjectURL(a.href);
 }
 
-// ========== Cloudflare Workers 云端同步 ==========
+// 上传到 Cloudflare R2（调用Worker接口）
 async function uploadToCloud(){
   const list = getList();
   try{
@@ -181,7 +186,9 @@ async function uploadToCloud(){
   }catch(e){
     alert("❌上传失败："+e.message)
   }
+}
 
+// 从云端拉取数据
 async function pullFromCloud(){
   try{
     const resp = await fetch(`${WORKER_URL}/get?key=${REMOTE_FILE_KEY}`);
